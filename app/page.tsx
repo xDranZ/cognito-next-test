@@ -1,65 +1,158 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+type AuthState = "idle" | "loading" | "error";
+
+function base64UrlEncode(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function createCodeChallenge(verifier: string) {
+  const data = new TextEncoder().encode(verifier);
+  const digest = await window.crypto.subtle.digest("SHA-256", data);
+  return base64UrlEncode(digest);
+}
+
+function createCodeVerifier() {
+  const bytes = new Uint8Array(32);
+  window.crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes.buffer);
+}
+
+function createRandomValue() {
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes.buffer);
+}
+
+function normalizeCognitoDomain(domain: string | undefined) {
+  if (!domain) return "";
+  return domain.startsWith("http://") || domain.startsWith("https://")
+    ? domain
+    : `https://${domain}`;
+}
 
 export default function Home() {
+  const [status, setStatus] = useState<AuthState>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const handledRef = useRef(false);
+
+  const login = async () => {
+    const codeVerifier = createCodeVerifier();
+    const codeChallenge = await createCodeChallenge(codeVerifier);
+    const state = createRandomValue();
+    const nonce = createRandomValue();
+    window.sessionStorage.setItem("cognito_pkce_verifier", codeVerifier);
+    window.sessionStorage.setItem("cognito_oauth_state", state);
+    window.sessionStorage.setItem("cognito_oauth_nonce", nonce);
+    const redirectUri = encodeURIComponent(
+      process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI ?? "",
+    );
+    const scope = encodeURIComponent(
+      process.env.NEXT_PUBLIC_COGNITO_SCOPES ?? "openid email",
+    );
+    const domain = normalizeCognitoDomain(
+      process.env.NEXT_PUBLIC_COGNITO_DOMAIN,
+    );
+    const url =
+      `${domain}/oauth2/authorize` +
+      `?response_type=code` +
+      `&client_id=${process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID}` +
+      `&redirect_uri=${redirectUri}` +
+      `&scope=${scope}` +
+      `&state=${encodeURIComponent(state)}` +
+      `&nonce=${encodeURIComponent(nonce)}` +
+      `&code_challenge_method=S256` +
+      `&code_challenge=${encodeURIComponent(codeChallenge)}`;
+
+    window.location.href = url;
+  };
+
+  useEffect(() => {
+    if (handledRef.current) return;
+    handledRef.current = true;
+
+    const params = new URLSearchParams(window.location.search);
+    const errorParam = params.get("error");
+    const errorDescription = params.get("error_description");
+    if (errorParam) {
+      setStatus("error");
+      setError(
+        errorDescription ? `${errorParam}: ${errorDescription}` : errorParam,
+      );
+      return;
+    }
+
+    const code = params.get("code");
+    if (!code) return;
+
+    const returnedState = params.get("state");
+    const expectedState = window.sessionStorage.getItem("cognito_oauth_state");
+    if (!returnedState || !expectedState || returnedState !== expectedState) {
+      setStatus("error");
+      setError("invalid_state");
+      return;
+    }
+
+    const codeVerifier = window.sessionStorage.getItem("cognito_pkce_verifier");
+    if (!codeVerifier) {
+      setStatus("error");
+      setError("missing_code_verifier");
+      return;
+    }
+
+    const nonce = window.sessionStorage.getItem("cognito_oauth_nonce");
+    if (!nonce) {
+      setStatus("error");
+      setError("missing_nonce");
+      return;
+    }
+
+    setStatus("loading");
+    fetch("/api/cognito/callback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, codeVerifier, nonce }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error ?? "token_exchange_failed");
+        }
+        window.sessionStorage.removeItem("cognito_pkce_verifier");
+        window.sessionStorage.removeItem("cognito_oauth_state");
+        window.sessionStorage.removeItem("cognito_oauth_nonce");
+        window.location.replace("/protected");
+      })
+      .catch((err: Error) => {
+        setStatus("error");
+        setError(err.message);
+      });
+  }, []);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main style={{ padding: 40 }}>
+      {status === "loading" && <p>Cargando sesion...</p>}
+      {status === "error" && <p style={{ color: "crimson" }}>Error: {error}</p>}
+      {status !== "loading" && (
+        <button
+          onClick={login}
+          style={{
+            marginTop: 20,
+            padding: "10px 20px",
+            fontSize: 16,
+            cursor: "pointer",
+          }}
+        >
+          Login
+        </button>
+      )}
+    </main>
   );
 }
