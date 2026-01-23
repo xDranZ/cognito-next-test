@@ -15,7 +15,6 @@ COPY . .
 
 # 👇 CLAVE ABSOLUTA:
 # Next.js necesita el .env.production PRESENTE en build time
-COPY .env.production .env.production
 
 RUN npm run build
 
