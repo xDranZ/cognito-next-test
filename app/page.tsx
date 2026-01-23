@@ -10,7 +10,10 @@ function base64UrlEncode(buffer: ArrayBuffer) {
   for (const byte of bytes) {
     binary += String.fromCharCode(byte);
   }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 async function createCodeChallenge(verifier: string) {
@@ -150,7 +153,7 @@ export default function Home() {
             cursor: "pointer",
           }}
         >
-          Login
+          Loginnn
         </button>
       )}
     </main>
