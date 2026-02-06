@@ -141,7 +141,7 @@ export default function Home() {
 
   return (
     <main style={{ padding: 40 }}>
-      {status === "loading" && <p>Cargando sesion...</p>}
+      {status === "loading" && <p>Cargando sesion....</p>}
       {status === "error" && <p style={{ color: "crimson" }}>Error: {error}</p>}
       {status !== "loading" && (
         <button
