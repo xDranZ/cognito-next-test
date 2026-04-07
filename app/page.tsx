@@ -139,7 +139,7 @@ export default function Home() {
       });
   }, []);
 
-  /* jajaa */
+  /* jajaaa */
   return (
     <main style={{ padding: 40 }}>
       {status === "loading" && <p>Cargando sesion....</p>}
