@@ -17,14 +17,20 @@ jobs:
 
       - name: Build and push image
         run: |
-          docker build -t xdranz/cognito-next-test .
+          docker build \
+            --build-arg NEXT_PUBLIC_COGNITO_DOMAIN="${{ secrets.NEXT_PUBLIC_COGNITO_DOMAIN }}" \
+            --build-arg NEXT_PUBLIC_COGNITO_CLIENT_ID="${{ secrets.NEXT_PUBLIC_COGNITO_CLIENT_ID }}" \
+            --build-arg NEXT_PUBLIC_COGNITO_REDIRECT_URI="${{ secrets.NEXT_PUBLIC_COGNITO_REDIRECT_URI }}" \
+            --build-arg NEXT_PUBLIC_COGNITO_SCOPES="${{ secrets.NEXT_PUBLIC_COGNITO_SCOPES }}" \
+            --build-arg NEXT_PUBLIC_COGNITO_LOGOUT_URI="${{ secrets.NEXT_PUBLIC_COGNITO_LOGOUT_URI }}" \
+            -t xdranz/cognito-next-test .
           docker push xdranz/cognito-next-test
 
       - name: Deploy on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
+          username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ~/infra
